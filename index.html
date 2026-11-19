@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BACnet Edge SCADA Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-canvas: #f3f5f8;
+      --bg-card: #ffffff;
+      --bg-input: #f8fafc;
+      --bg-log: #f8fafc;
+      --border-color: #dce1e8;
+      --divider-color: #edf0f5;
+      --text-main: #181c24;
+      --text-secondary: #4e5969;
+      --text-muted: #86909c;
+      --brand-emerald: #00b173;
+      --brand-emerald-hover: #009963;
+      --accent-blue: #165dff;
+      --accent-amber: #d97706;
+      --accent-red: #f53f3f;
+      --card-shadow: 0 2px 8px rgba(16, 24, 40, 0.05);
+    }
+
+    [data-theme="dark"] {
+      --bg-canvas: #0b1120;
+      --bg-card: #161f33;
+      --bg-input: #0f172a;
+      --bg-log: #0f172a;
+      --border-color: #29354d;
+      --divider-color: #222d42;
+      --text-main: #f1f5f9;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --brand-emerald: #00c480;
+      --brand-emerald-hover: #00a86d;
+      --accent-blue: #38bdf8;
+      --accent-amber: #fbbf24;
+      --accent-red: #f87171;
+      --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1, "cv05" 1;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-main);
+      padding: 28px 24px;
+      max-width: 1160px;
+      margin: 0 auto;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    /* Top Utility Bar */
+    .top-bar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 18px;
+    }
+
+    .btn-outline {
+      padding: 7px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-card);
+      color: var(--text-secondary);
+      font-size: 0.84rem;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+      transition: all 0.15s ease;
+    }
+
+    .btn-outline:hover {
+      border-color: var(--brand-emerald);
+      color: var(--text-main);
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 0.78rem;
+      border-radius: 5px;
+    }
+
+    .btn-danger-outline:hover {
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+    }
+
+    /* Login Card */
+    .login-wrapper {
+      max-width: 420px;
+      margin: 36px auto;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 32px;
+      box-shadow: var(--card-shadow);
+    }
+
+    .brand-tag {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--brand-emerald);
+      background: rgba(0, 177, 115, 0.1);
+      padding: 4px 10px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      letter-spacing: 0.03em;
+    }
+
+    .login-wrapper h2 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .login-wrapper p {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      margin-bottom: 24px;
+    }
+
+    .form-field {
+      margin-bottom: 16px;
+    }
+
+    .form-field label {
+      display: block;
+      font-size: 0.83rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .form-field input[type="text"],
+    .form-field input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-input);
+      color: var(--text-main);
+      font-size: 0.92rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-field input:focus {
+      border-color: var(--brand-emerald);
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      margin-bottom: 22px;
+    }
+
+    .error-msg {
+      color: var(--accent-red);
+      background: rgba(245, 63, 63, 0.08);
+      border: 1px solid rgba(245, 63, 63, 0.3);
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 0.84rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    /* Dashboard Layout */
+    #dashboardView {
+      display: none;
+    }
+
+    .header-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 18px 24px;
+      margin-bottom: 20px;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      margin-top: 3px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--brand-emerald);
+      background-color: rgba(0, 177, 115, 0.1);
+      border: 1px solid rgba(0, 177, 115, 0.25);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--brand-emerald);
+    }
+
+    .status-badge.offline {
+      color: var(--accent-red);
+      background-color: rgba(245, 63, 63, 0.1);
+      border-color: rgba(245, 63, 63, 0.25);
+    }
+
+    .status-badge.offline .status-dot {
+      background-color: var(--accent-red);
+    }
+
+    /* KPI Grid */
+    .grid-kpi {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 20px 22px;
+      box-shadow: var(--card-shadow);
+    }
+
+    .kpi-card {
+      border-top: 3px solid var(--border-color);
+    }
+
+    .kpi-card.kpi-temp { border-top-color: var(--accent-blue); }
+    .kpi-card.kpi-setpoint { border-top-color: var(--brand-emerald); }
+    .kpi-card.kpi-time { border-top-color: var(--text-muted); }
+
+    .kpi-label {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .kpi-value {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-top: 10px;
+      letter-spacing: -0.02em;
+      color: var(--text-main);
+    }
+
+    .temp-color { color: var(--accent-blue); }
+    .setpoint-color { color: var(--brand-emerald); }
+
+    /* Main Content Grid */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 850px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    .card-header {
+      padding-bottom: 14px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--divider-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .card-tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .record-count {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 280px;
+      width: 100%;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .control-group label {
+      display: block;
+      font-size: 0.84rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      padding: 11px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-input);
+      color: var(--text-main);
+      font-size: 1.05rem;
+      font-weight: 600;
+      outline: none;
+    }
+
+    input[type="number"]:focus {
+      border-color: var(--brand-emerald);
+    }
+
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease, opacity 0.15s ease;
+    }
+
+    .btn-primary {
+      width: 100%;
+      background-color: var(--brand-emerald);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--brand-emerald-hover);
+    }
+
+    .btn-release {
+      width: 100%;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+    }
+
+    .btn-release:hover {
+      border-color: var(--text-muted);
+      color: var(--text-main);
+    }
+
+    /* Event Log */
+    .log-box {
+      background-color: var(--bg-log);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px 14px;
+      height: 150px;
+      overflow-y: auto;
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+    }
+
+    .log-entry {
+      padding: 4px 0;
+      border-bottom: 1px solid var(--divider-color);
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    .log-time {
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-right: 8px;
+    }
+
+    .log-cmd {
+      color: var(--brand-emerald);
+      font-weight: 600;
+    }
+
+    /* Print / PDF Styling */
+    @media print {
+      body {
+        background-color: #ffffff !important;
+        color: #181c24 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+
+      .top-bar,
+      .header-actions button,
+      .card-tools button,
+      #controlCard {
+        display: none !important;
+      }
+
+      .header-card,
+      .card {
+        background-color: #ffffff !important;
+        border: 1px solid #dce1e8 !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+      }
+
+      .main-grid {
+        grid-template-columns: 1fr !important;
+      }
+
+      .log-box {
+        height: auto !important;
+        max-height: 260px !important;
+        overflow: visible !important;
+        background-color: #f8fafc !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP UTILITY BAR -->
+  <div class="top-bar">
+    <button id="themeToggle" class="btn-outline" onclick="toggleTheme()">Night Mode</button>
+  </div>
+
+  <!-- 1. LOGIN SCREEN -->
+  <div id="loginView" class="login-wrapper">
+    <div class="brand-tag">EMQX CLOUD &bull; WSS 8084</div>
+    <h2>SCADA Operator Console</h2>
+    <p>Sign in with your broker operator credentials.</p>
+
+    <div id="loginError" class="error-msg"></div>
+
+    <form onsubmit="handleLogin(event)">
+      <div class="form-field">
+        <label for="brokerInput">Broker Endpoint</label>
+        <input type="text" id="brokerInput" value="b51272f2.ala.eu-central-1.emqxsl.com" required />
+      </div>
+      <div class="form-field">
+        <label for="userInput">Operator Username</label>
+        <input type="text" id="userInput" value="admin_UI" required />
+      </div>
+      <div class="form-field">
+        <label for="passInput">Password</label>
+        <input type="password" id="passInput" placeholder="Enter password" required />
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="rememberCheck" checked />
+        <label for="rememberCheck">Remember credentials on this device</label>
+      </div>
+      <button type="submit" id="connectBtn" class="btn-primary">Connect to Broker</button>
+    </form>
+  </div>
+
+  <!-- 2. DASHBOARD SCREEN -->
+  <div id="dashboardView">
+    <div class="header-card">
+      <div>
+        <h1>BACnet/IP Edge SCADA Console</h1>
+        <div class="subtitle">Gateway: edge_sim_01 &bull; Device: RoomController_1261679</div>
+      </div>
+      <div class="header-actions">
+        <div id="connStatus" class="status-badge">
+          <span class="status-dot"></span>
+          <span id="connText">Connected</span>
+        </div>
+        <button class="btn-outline" onclick="exportCSV()">Export CSV</button>
+        <button class="btn-outline" onclick="printReport()">Print / PDF</button>
+        <button class="btn-outline" onclick="logout()">Disconnect</button>
+      </div>
+    </div>
+
+    <section class="grid-kpi">
+      <div class="card kpi-card kpi-temp">
+        <div class="kpi-label">Indoor Temperature</div>
+        <div id="indoorTemp" class="kpi-value temp-color">00.0 °C</div>
+      </div>
+      <div class="card kpi-card kpi-setpoint">
+        <div class="kpi-label">Target Setpoint</div>
+        <div id="targetSetpoint" class="kpi-value setpoint-color">00.0 °C</div>
+      </div>
+      <div class="card kpi-card kpi-time">
+        <div class="kpi-label">Last Packet Received</div>
+        <div id="lastUpdate" class="kpi-value" style="font-size: 1.65rem; padding-top: 4px;">00:00:00</div>
+      </div>
+    </section>
+
+    <section class="main-grid">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Live Thermal Telemetry</span>
+          <div class="card-tools">
+            <span id="recordCount" class="record-count">0 saved</span>
+            <button class="btn-outline btn-sm" onclick="downloadChartPNG()">Save PNG</button>
+            <button class="btn-outline btn-sm btn-danger-outline" onclick="clearHistory()">Clear</button>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="telemetryChart"></canvas>
+        </div>
+      </div>
+
+      <div id="controlCard" class="card">
+        <div class="card-header">
+          <span class="card-title">Setpoint Control</span>
+        </div>
+        <div class="control-group">
+          <div>
+            <label for="setpointInput">Target Temperature (°C)</label>
+            <input type="number" id="setpointInput" value="24.5" step="0.5" min="10" max="35" />
+          </div>
+          <button class="btn-primary" onclick="sendOverride()">Apply Override</button>
+          <button class="btn-release" onclick="sendRelease()">Release to Auto</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <span class="card-title">System Event Log</span>
+      </div>
+      <div id="eventLog" class="log-box"></div>
+    </section>
+  </div>
+
+  <script>
+    const TELEMETRY_TOPIC = 'scada/edge_sim_01/telemetry';
+    const COMMAND_TOPIC = 'scada/edge_sim_01/command';
+    const HISTORY_STORAGE_KEY = 'scada_telemetry_history';
+    const MAX_STORED_RECORDS = 1000;
+    const MAX_CHART_POINTS = 50;
+
+    // Force identical Inter typography across all Chart.js canvas numbers and labels
+    Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    Chart.defaults.font.size = 12;
+    Chart.defaults.font.weight = '500';
+
+    let client = null;
+    let telemetryChart = null;
+    let telemetryHistory = [];
+
+    function formatTime(dateObj) {
+      return dateObj.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+    }
+
+    function formatDateTime(dateObj) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d} ${formatTime(dateObj)}`;
+    }
+
+    function updateRecordCounter() {
+      const el = document.getElementById('recordCount');
+      if (el) el.textContent = `${telemetryHistory.length} saved`;
+    }
+
+    function saveHistoryToBrowser() {
+      try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(telemetryHistory));
+        updateRecordCounter();
+      } catch (e) {
+        console.warn('Local storage quota reached:', e);
+      }
+    }
+
+    function loadHistoryFromBrowser() {
+      try {
+        const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+        if (raw) {
+          telemetryHistory = JSON.parse(raw);
+          updateRecordCounter();
+        }
+      } catch (e) {
+        telemetryHistory = [];
+      }
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('scada_theme', theme);
+      document.getElementById('themeToggle').textContent = theme === 'dark' ? 'Light Mode' : 'Night Mode';
+
+      if (telemetryChart) {
+        const isDark = theme === 'dark';
+        const tickColor = isDark ? '#94a3b8' : '#4e5969';
+        const gridColor = isDark ? '#222d42' : '#edf0f5';
+        const legendColor = isDark ? '#f1f5f9' : '#181c24';
+
+        telemetryChart.options.scales.x.ticks.color = tickColor;
+        telemetryChart.options.scales.x.grid.color = gridColor;
+        telemetryChart.options.scales.y.ticks.color = tickColor;
+        telemetryChart.options.scales.y.grid.color = gridColor;
+        telemetryChart.options.plugins.legend.labels.color = legendColor;
+        telemetryChart.update();
+      }
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedTheme = localStorage.getItem('scada_theme') || 'light';
+      applyTheme(savedTheme);
+      loadHistoryFromBrowser();
+
+      const savedCreds = JSON.parse(localStorage.getItem('scada_emqx_creds') || 'null');
+      if (savedCreds) {
+        document.getElementById('brokerInput').value = savedCreds.broker || 'b51272f2.ala.eu-central-1.emqxsl.com';
+        document.getElementById('userInput').value = savedCreds.username || 'admin_UI';
+        document.getElementById('passInput').value = savedCreds.password || '';
+      }
+    });
+
+    function showError(msg) {
+      const errEl = document.getElementById('loginError');
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+      document.getElementById('connectBtn').textContent = 'Connect to Broker';
+      document.getElementById('connectBtn').disabled = false;
+    }
+
+    function addLog(message, isCommand = false) {
+      const logBox = document.getElementById('eventLog');
+      const now = formatTime(new Date());
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<span class="log-time">${now}</span> <span class="${isCommand ? 'log-cmd' : ''}">${message}</span>`;
+      logBox.prepend(entry);
+    }
+
+    // Ensures exported PNGs and printed charts always have a crisp solid background
+    const canvasBackgroundPlugin = {
+      id: 'customCanvasBackgroundColor',
+      beforeDraw: (chart) => {
+        const { ctx } = chart;
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-over';
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        ctx.fillStyle = isDark ? '#161f33' : '#ffffff';
+        ctx.fillRect(0, 0, chart.width, chart.height);
+        ctx.restore();
+      }
+    };
+
+    function initChart() {
+      if (telemetryChart) return;
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const ctx = document.getElementById('telemetryChart').getContext('2d');
+
+      // Populate initial chart from stored history (last MAX_CHART_POINTS)
+      const recentSlice = telemetryHistory.slice(-MAX_CHART_POINTS);
+      const initialLabels = recentSlice.map(r => r.timeLabel);
+      const initialTemps = recentSlice.map(r => r.temp);
+      const initialSetpoints = recentSlice.map(r => r.setpoint);
+
+      if (recentSlice.length > 0) {
+        const last = recentSlice[recentSlice.length - 1];
+        document.getElementById('indoorTemp').textContent = `${last.temp.toFixed(1)} °C`;
+        document.getElementById('targetSetpoint').textContent = `${last.setpoint.toFixed(1)} °C`;
+        document.getElementById('lastUpdate').textContent = last.timeLabel;
+      }
+
+      telemetryChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: initialLabels,
+          datasets: [
+            {
+              label: 'Indoor Temp (°C)',
+              data: initialTemps,
+              borderColor: '#165dff',
+              backgroundColor: 'rgba(22, 93, 255, 0.08)',
+              borderWidth: 2,
+              pointRadius: 2.5,
+              tension: 0.25,
+              fill: true
+            },
+            {
+              label: 'Target Setpoint (°C)',
+              data: initialSetpoints,
+              borderColor: '#00b173',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              pointRadius: 0,
+              stepped: true,
+              fill: false
+            }
+          ]
+        },
+        plugins: [canvasBackgroundPlugin],
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 250 },
+          scales: {
+            x: {
+              ticks: {
+                color: isDark ? '#94a3b8' : '#4e5969',
+                font: { family: "'Inter', sans-serif", size: 12, weight: '500' }
+              },
+              grid: { color: isDark ? '#222d42' : '#edf0f5' }
+            },
+            y: {
+              ticks: {
+                color: isDark ? '#94a3b8' : '#4e5969',
+                font: { family: "'Inter', sans-serif", size: 12, weight: '500' },
+                callback: function(value) {
+                  return Number(value).toFixed(1);
+                }
+              },
+              grid: { color: isDark ? '#222d42' : '#edf0f5' }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: {
+                color: isDark ? '#f1f5f9' : '#181c24',
+                font: { family: "'Inter', sans-serif", size: 12, weight: '500' }
+              }
+            },
+            tooltip: {
+              titleFont: { family: "'Inter', sans-serif", size: 12, weight: '600' },
+              bodyFont: { family: "'Inter', sans-serif", size: 12, weight: '500' },
+              callbacks: {
+                label: function(context) {
+                  return `${context.dataset.label}: ${Number(context.parsed.y).toFixed(1)} °C`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function handleLogin(event) {
+      event.preventDefault();
+      document.getElementById('loginError').style.display = 'none';
+
+      let brokerHost = document.getElementById('brokerInput').value.trim();
+      brokerHost = brokerHost.replace(/^wss?:\/\//, '').split(':')[0].split('/')[0];
+
+      const username = document.getElementById('userInput').value.trim();
+      const password = document.getElementById('passInput').value;
+      const remember = document.getElementById('rememberCheck').checked;
+
+      const btn = document.getElementById('connectBtn');
+      btn.textContent = 'Connecting...';
+      btn.disabled = true;
+
+      const brokerUrl = `wss://${brokerHost}:8084/mqtt`;
+      const clientId = 'scada_ui_' + Math.random().toString(16).substring(2, 10);
+
+      client = mqtt.connect(brokerUrl, {
+        clientId,
+        username,
+        password,
+        reconnectPeriod: 4000
+      });
+
+      client.on('connect', () => {
+        if (remember) {
+          localStorage.setItem('scada_emqx_creds', JSON.stringify({ broker: brokerHost, username, password }));
+        } else {
+          localStorage.removeItem('scada_emqx_creds');
+        }
+
+        document.getElementById('loginView').style.display = 'none';
+        document.getElementById('dashboardView').style.display = 'block';
+        initChart();
+
+        const statusEl = document.getElementById('connStatus');
+        statusEl.classList.remove('offline');
+        document.getElementById('connText').textContent = 'Connected';
+
+        addLog(`Authenticated as ${username}`);
+        client.subscribe(TELEMETRY_TOPIC);
+      });
+
+      client.on('error', (err) => {
+        client.end(true);
+        showError(`Connection Failed: ${err.message || 'Check credentials.'}`);
+      });
+
+      client.on('offline', () => {
+        const statusEl = document.getElementById('connStatus');
+        statusEl.classList.add('offline');
+        document.getElementById('connText').textContent = 'Reconnecting';
+      });
+
+      client.on('message', (topic, message) => {
+        try {
+          const data = JSON.parse(message.toString());
+          if (data.telemetry) {
+            const temp = parseFloat(data.telemetry.indoor_temperature);
+            const setpoint = parseFloat(data.telemetry.target_setpoint);
+            const dateObj = new Date(data.timestamp * 1000);
+            const timeLabel = formatTime(dateObj);
+            const isoTime = formatDateTime(dateObj);
+
+            document.getElementById('indoorTemp').textContent = `${temp.toFixed(1)} °C`;
+            document.getElementById('targetSetpoint').textContent = `${setpoint.toFixed(1)} °C`;
+            document.getElementById('lastUpdate').textContent = timeLabel;
+
+            // Append to persistent history
+            telemetryHistory.push({ isoTime, timeLabel, temp, setpoint });
+            if (telemetryHistory.length > MAX_STORED_RECORDS) {
+              telemetryHistory.shift();
+            }
+            saveHistoryToBrowser();
+
+            // Update live chart
+            telemetryChart.data.labels.push(timeLabel);
+            telemetryChart.data.datasets[0].data.push(temp);
+            telemetryChart.data.datasets[1].data.push(setpoint);
+
+            if (telemetryChart.data.labels.length > MAX_CHART_POINTS) {
+              telemetryChart.data.labels.shift();
+              telemetryChart.data.datasets[0].data.shift();
+              telemetryChart.data.datasets[1].data.shift();
+            }
+            telemetryChart.update();
+
+            addLog(`Indoor: ${temp.toFixed(1)} °C | Setpoint: ${setpoint.toFixed(1)} °C`);
+          }
+        } catch (e) {
+          addLog(`Payload error: ${e.message}`);
+        }
+      });
+    }
+
+    function exportCSV() {
+      if (telemetryHistory.length === 0) {
+        return alert('No readings recorded yet to export.');
+      }
+
+      let csvContent = 'Date_Time,Gateway_ID,Device_ID,Indoor_Temperature_C,Target_Setpoint_C\n';
+      telemetryHistory.forEach(row => {
+        csvContent += `${row.isoTime},edge_sim_01,RoomController_1261679,${row.temp.toFixed(1)},${row.setpoint.toFixed(1)}\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const today = new Date().toISOString().slice(0, 10);
+
+      link.href = url;
+      link.download = `scada_readings_${today}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      addLog(`Exported ${telemetryHistory.length} readings to CSV`, true);
+    }
+
+    function downloadChartPNG() {
+      if (!telemetryChart || telemetryHistory.length === 0) {
+        return alert('No chart data available to save yet.');
+      }
+      const link = document.createElement('a');
+      const today = new Date().toISOString().slice(0, 10);
+      link.href = telemetryChart.toBase64Image('image/png', 1.0);
+      link.download = `thermal_trend_${today}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      addLog('Downloaded trend chart as PNG', true);
+    }
+
+    function printReport() {
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      if (currentTheme === 'dark') {
+        // Temporarily switch chart colors to light mode for crisp printing
+        applyTheme('light');
+        setTimeout(() => {
+          window.print();
+          applyTheme('dark');
+        }, 150);
+      } else {
+        window.print();
+      }
+    }
+
+    function clearHistory() {
+      if (telemetryHistory.length === 0) return;
+      if (!confirm('Clear all saved telemetry readings from this browser?')) return;
+
+      telemetryHistory = [];
+      localStorage.removeItem(HISTORY_STORAGE_KEY);
+      updateRecordCounter();
+
+      if (telemetryChart) {
+        telemetryChart.data.labels = [];
+        telemetryChart.data.datasets[0].data = [];
+        telemetryChart.data.datasets[1].data = [];
+        telemetryChart.update();
+      }
+      addLog('Cleared stored browser telemetry history', true);
+    }
+
+    function sendOverride() {
+      if (!client || !client.connected) return alert('Not connected.');
+      const val = parseFloat(document.getElementById('setpointInput').value);
+      if (isNaN(val)) return alert('Enter a valid temperature.');
+
+      client.publish(COMMAND_TOPIC, JSON.stringify({ action: 'override', setpoint: val }));
+      addLog(`Applied Override: ${val.toFixed(1)} °C`, true);
+    }
+
+    function sendRelease() {
+      if (!client || !client.connected) return alert('Not connected.');
+      client.publish(COMMAND_TOPIC, JSON.stringify({ action: 'release' }));
+      addLog('Released to Auto Control', true);
+    }
+
+    function logout() {
+      if (client) client.end(true);
+      document.getElementById('dashboardView').style.display = 'none';
+      document.getElementById('loginView').style.display = 'block';
+      document.getElementById('connectBtn').textContent = 'Connect to Broker';
+      document.getElementById('connectBtn').disabled = false;
+    }
+  </script>
+</body>
+</html>
